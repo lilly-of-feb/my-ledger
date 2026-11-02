@@ -11,7 +11,8 @@ let settings={out:makeItems(DEFAULTS.out),in:makeItems(DEFAULTS.in),payment:make
 const CATS=[]; const allCats=()=>[...settings.out,...settings.in]; const catIcon=n=>allCats().find(c=>c.name===n)?.icon||'📌';
 const KEY='simple-ledger-v1';
 const BACKUP_KEY='simple-ledger-auto-backups-v1',JSON_DATE_KEY='simple-ledger-json-exported-at-v1';
-let db={transactions:[],budgets:{},fixed:[],settings,sampleFixedSeeded:false},month=localMonth(),kind='out',category='식비',editing=null,noticeTimer;
+let db={transactions:[],budgets:{},fixed:[],settings,sampleFixedSeeded:false},month=localMonth(),kind='out',category='외식비',editing=null,editingFixed=null,noticeTimer;
+const LIVING_CATEGORIES=['외식비','식료품·생활용품','의류·미용','취미·여행·문화','고양이','게임·웹소설·웹툰','병원의약','경조사'];
 function localDate(d=new Date()){return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')}
 function localMonth(){return localDate().slice(0,7)}
 function won(n){return Math.round(n||0).toLocaleString('ko-KR')+'원'}
@@ -67,7 +68,7 @@ function manageSetting(key,id=null){
  if(arr.some(x=>x.name===name.trim()&&x.id!==id))return notify('같은 이름이 이미 있어.');
  if(item){
   const old=item.name;item.icon=icon.trim()||'📌';item.name=name.trim();
-  if(key==='payment'){db.transactions.forEach(t=>{if(t.payment===old)t.payment=item.name});db.fixed.forEach(f=>{if(f.payment===old)f.payment=item.name})}else{db.transactions.forEach(t=>{if(t.category===old)t.category=item.name});db.fixed.forEach(f=>{if(f.category===old)f.category=item.name})}
+  if(key==='payment'){db.transactions.forEach(t=>{if(t.payment===old)t.payment=item.name});db.fixed.forEach(f=>{if(f.payment===old)f.payment=item.name})}else{db.transactions.forEach(t=>{if(t.category===old)t.category=item.name});db.fixed.forEach(f=>{if(f.category===old)f.category=item.name});const li=LIVING_CATEGORIES.indexOf(old);if(li>=0)LIVING_CATEGORIES[li]=item.name}
  }else arr.push({id:'c'+Date.now()+Math.random().toString(36).slice(2,5),icon:icon.trim()||'📌',name:name.trim()});
  saveSettings();
 }
@@ -94,7 +95,7 @@ function renderFixed(){
  $('fixedList').innerHTML=db.fixed.length?db.fixed.map(f=>{
   const done=db.transactions.some(t=>t.fixedId===f.id&&t.fixedMonth===month);
   return `<div class="card fixed-item"><div class="row"><div class="grow"><b>${safe(f.name)}</b><div class="tiny">매월 ${f.day}일 · ${safe(f.category)} · ${safe(f.payment||'결제수단 미설정')}</div><b>${won(f.amount)}</b></div>${done?'<span class="tiny">가져옴 ✓</span>':'<span class="tiny">미등록</span>'}</div><div class="controls" style="justify-content:flex-end;margin-top:8px"><button data-fixed-edit="${f.id}">수정</button><button data-fixed-delete="${f.id}">삭제</button></div></div>`;
- }).join(''):'<div class="card muted" style="text-align:center;padding:24px;font-size:13px">등록된 고정 지출이 없어. 아래에서 추가해 줘.</div>';
+ }).join(''):'<div class="card muted" style="text-align:center;padding:24px;font-size:13px">등록된 고정지출이 없어.</div>';
  const remaining=db.fixed.filter(f=>!db.transactions.some(t=>t.fixedId===f.id&&t.fixedMonth===month)).length;
  $('importFixedBtn').disabled=remaining===0;
  $('importFixedBtn').textContent=remaining?`${month.slice(5)}월 고정지출 ${remaining}건 가져오기`:'모두 가져왔어';
@@ -102,21 +103,20 @@ function renderFixed(){
 function records(){return db.transactions.filter(t=>t.date?.startsWith(month))}
 function sum(arr,k){return arr.filter(t=>t.type===k).reduce((n,t)=>n+Number(t.amount||0),0)}
 function render(){
- const a=records(),inc=sum(a,'in'),out=sum(a,'out'),budget=Number(db.budgets[month]||0);
+ const a=records(),inc=sum(a,'in'),out=sum(a,'out'),livingOut=a.filter(t=>t.type==='out'&&LIVING_CATEGORIES.includes(t.category)).reduce((n,t)=>n+Number(t.amount||0),0),budget=Number(db.budgets[month]||0);
  $('monthTitle').textContent=month.replace('-','년 ')+'월';
  $('income').textContent=won(inc);$('expense').textContent=won(out);
- $('remaining').textContent=budget?won(budget-out):'예산 미설정';
- $('budgetText').textContent=budget?`월 예산 ${won(budget)} · ${Math.round(out/budget*100)}% 사용`:'월 예산을 설정해 주세요';
- $('budgetBar').style.width=budget?Math.min(100,out/budget*100)+'%':'0%';
- $('budgetBar').style.background=budget&&out>budget?'var(--red)':'var(--accent)';
+ $('remaining').textContent=budget?won(budget-livingOut):'예산 미설정';
+ $('budgetText').textContent=budget?`생활비 예산 ${won(budget)} · ${Math.round(livingOut/budget*100)}% 사용`:'생활비 예산을 설정해 주세요';
+ $('budgetBar').style.width=budget?Math.min(100,livingOut/budget*100)+'%':'0%';
+ $('budgetBar').style.background=budget&&livingOut>budget?'var(--red)':'var(--accent)';
  const list=[...a].sort((x,y)=>y.date.localeCompare(x.date)||y.id-x.id);
  $('count').textContent=list.length+'건';
  $('transactions').innerHTML=list.length?list.map(t=>`<div class="transaction"><div class="emoji">${catIcon(t.category)}</div><div class="grow"><div style="font-weight:650;font-size:14px">${safe(t.memo||t.category)}</div><div class="tiny">${safe(t.date)} · ${safe(t.category)}</div></div><div class="amount" style="color:${t.type==='in'?'var(--accent)':'inherit'}">${t.type==='in'?'+':'−'}${won(t.amount)}<div class="controls"><button data-edit="${t.id}">수정</button><button data-delete="${t.id}">삭제</button></div></div></div>`).join(''):'<div class="muted" style="text-align:center;padding:30px 0;font-size:13px">아직 내역이 없어. 첫 거래를 등록해 봐!</div>';
- const groups={};a.filter(t=>t.type==='out').forEach(t=>groups[t.category]=(groups[t.category]||0)+t.amount);
- const entries=Object.entries(groups).sort((x,y)=>y[1]-x[1]),max=entries[0]?.[1]||1;
- $('statistics').innerHTML=entries.length?entries.map(([c,v])=>`<div class="categoryline"><div class="row" style="justify-content:space-between;font-size:13px"><span>${catIcon(c)} ${safe(c)}</span><b>${won(v)}</b></div><div class="bar"><span style="width:${v/max*100}%"></span></div><div class="tiny">${out?Math.round(v/out*100):0}%</div></div>`).join(''):'<div class="muted" style="text-align:center;padding:25px;font-size:13px">지출을 등록하면 통계가 나타나.</div>';
+ const renderGroup=(type)=>{const groups={};a.filter(t=>t.type===type).forEach(t=>groups[t.category]=(groups[t.category]||0)+Number(t.amount||0));const entries=Object.entries(groups).sort((x,y)=>y[1]-x[1]),total=entries.reduce((n,x)=>n+x[1],0),max=entries[0]?.[1]||1;return entries.length?entries.map(([c,v])=>`<div class="categoryline"><div class="row" style="justify-content:space-between;font-size:13px"><span>${catIcon(c)} ${safe(c)}</span><b>${won(v)}</b></div><div class="bar"><span style="width:${v/max*100}%"></span></div><div class="tiny">${total?Math.round(v/total*100):0}%</div></div>`).join(''):'<div class="muted" style="text-align:center;padding:18px;font-size:13px">해당 내역이 없어.</div>'};
+ $('statistics').innerHTML=`<b>지출분류 통계</b>${renderGroup('out')}<hr style="border:0;border-top:1px solid var(--line);margin:18px 0"><b>수입분류 통계</b>${renderGroup('in')}`;
  renderFixed();
- if(budget&&out>budget)notify('이번 달 예산을 초과했어.');
+ if(budget&&livingOut>budget)notify('생활비 예산을 초과했어.');
 }
 function showEntry(type='out',t=null){
  editing=t?.id??null;kind=t?.type||type;category=t?.category||(kind==='in'?settings.in[0]?.name:settings.out[0]?.name);
@@ -125,17 +125,18 @@ function showEntry(type='out',t=null){
  const choices=kind==='out'?settings.out:settings.in;
  $('cats').innerHTML=choices.map(c=>`<button class="cat ${category===c.name?'sel':''}" data-category="${safe(c.name)}"><div style="font-size:20px">${c.icon}</div>${safe(c.name)}</button>`).join('');
  $('paymentWrap').classList.toggle('hidden',kind==='in');
- $('payment').innerHTML=settings.payment.map(c=>`<option ${((t?.payment||settings.payment[0]?.name)===c.name)?'selected':''}>${safe(c.name)}</option>`).join('');
+ const selectedPayment=t?.payment||settings.payment[0]?.name||'';$('payment').innerHTML=settings.payment.map(c=>`<button type="button" class="cat payment-choice ${selectedPayment===c.name?'sel':''}" data-payment="${safe(c.name)}"><div style="font-size:20px">${c.icon}</div>${safe(c.name)}</button>`).join('');$('payment').dataset.value=selectedPayment;
  $('entryForm').classList.add('open');$('amount').focus();
 }
 function closeEntry(){$('entryForm').classList.remove('open');editing=null}
 $('expenseBtn').onclick=()=>showEntry('out');$('incomeBtn').onclick=()=>showEntry('in');$('closeForm').onclick=closeEntry;
 $('cats').onclick=e=>{const b=e.target.closest('[data-category]');if(!b)return;category=b.dataset.category;$('cats').querySelectorAll('.cat').forEach(x=>x.classList.toggle('sel',x===b))};
-$('saveEntry').onclick=()=>{const amount=Number($('amount').value),date=$('date').value;if(!Number.isSafeInteger(amount)||amount<=0||!date)return notify('금액과 날짜를 확인해 줘.');const t={id:editing??Date.now(),type:kind,amount,category,payment:kind==='out'?$('payment').value:'',memo:$('memo').value.trim(),date};if(editing)db.transactions=db.transactions.map(x=>x.id===editing?t:x);else db.transactions.push(t);if(persistTransactionChange()){closeEntry();render();notify('저장하고 자동 백업했어.')}};
+$('payment').onclick=e=>{const b=e.target.closest('[data-payment]');if(!b)return;$('payment').dataset.value=b.dataset.payment;$('payment').querySelectorAll('.cat').forEach(x=>x.classList.toggle('sel',x===b))};
+$('saveEntry').onclick=()=>{const amount=Number($('amount').value),date=$('date').value;if(!Number.isSafeInteger(amount)||amount<=0||!date)return notify('금액과 날짜를 확인해 줘.');const t={id:editing??Date.now(),type:kind,amount,category,payment:kind==='out'?$('payment').dataset.value:'',memo:$('memo').value.trim(),date};if(editing)db.transactions=db.transactions.map(x=>x.id===editing?t:x);else db.transactions.push(t);if(persistTransactionChange()){closeEntry();render();}};
 $('transactions').onclick=e=>{const edit=e.target.closest('[data-edit]'),del=e.target.closest('[data-delete]');if(edit){const t=db.transactions.find(x=>x.id===Number(edit.dataset.edit));if(t)showEntry(t.type,t)}if(del&&confirm('이 거래를 삭제할까?')){db.transactions=db.transactions.filter(x=>x.id!==Number(del.dataset.delete));persistTransactionChange();render()}};
 $('prev').onclick=()=>{const [y,m]=month.split('-').map(Number),d=new Date(y,m-2,1);month=localDate(d).slice(0,7);render()};
 $('next').onclick=()=>{const [y,m]=month.split('-').map(Number),d=new Date(y,m,1);month=localDate(d).slice(0,7);render()};
-$('setBudget').onclick=()=>{const old=db.budgets[month]??'',v=prompt(`${month} 월 지출 예산을 원 단위로 입력해 줘. (비우면 해제)`,old);if(v===null)return;if(v.trim()===''){delete db.budgets[month]}else if(!Number.isSafeInteger(Number(v))||Number(v)<0)return notify('0 이상의 정수 금액을 입력해 줘.');else db.budgets[month]=Number(v);persist();render()};
+$('setBudget').onclick=()=>{const old=db.budgets[month]??'',v=prompt(`${month} 생활비 예산을 원 단위로 입력해 줘. (비우면 해제)`,old);if(v===null)return;if(v.trim()===''){delete db.budgets[month]}else if(!Number.isSafeInteger(Number(v))||Number(v)<0)return notify('0 이상의 정수 금액을 입력해 줘.');else db.budgets[month]=Number(v);persist();render()};
 document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-tab]').forEach(x=>x.classList.toggle('active',x===b));document.querySelectorAll('.section').forEach(x=>x.classList.toggle('active',x.id===b.dataset.tab))});
 function openFixedForm(f=null){
  editingFixed=f?.id??null;
@@ -192,7 +193,7 @@ $('csvExportBtn').onclick=()=>{
 };
 $('restoreBtn').onclick=()=>$('restoreDialog').showModal();
 $('cancelRestore').onclick=()=>$('restoreDialog').close();
-function validDate(s){if(typeof s!=='string'||!/^\\d{4}-\\d{2}-\\d{2}$/.test(s))return false;const d=new Date(s+'T00:00:00');return !Number.isNaN(d.getTime())&&localDate(d)===s}
+function validDate(s){if(typeof s!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(s))return false;const d=new Date(s+'T00:00:00');return !Number.isNaN(d.getTime())&&localDate(d)===s}
 function validateBackup(d){
  if(!d||!Array.isArray(d.transactions)||d.transactions.length>100000||!d.budgets||typeof d.budgets!=='object'||Array.isArray(d.budgets)||!Array.isArray(d.fixed)||d.fixed.length>10000)return false;
  const allowed=allCats().map(c=>c.name);
@@ -208,6 +209,7 @@ $('doRestore').onclick=async()=>{const file=$('restoreFile').files[0];if(!file)r
  const priorSettings=settings;settings=d.settings;
  if(x.format!=='simple-ledger-backup-v1'||!validateBackup(d)){settings=priorSettings;throw Error();}if(!confirm('현재 가계부 데이터를 백업 파일 내용으로 교체할까?'))return;const restorePoints=readAutoBackups();try{localStorage.setItem(BACKUP_KEY,JSON.stringify([{savedAt:new Date().toISOString(),data:JSON.parse(JSON.stringify(db)),label:'복원 전 자동 보관'},...restorePoints].slice(0,3)))}catch(e){notify('복원 전 현재 데이터를 내부 백업하지 못했어. 복원을 중단할게.');return}db=d;settings=d.settings;if(!persist())return;$('fixedCategory').innerHTML=settings.out.map(c=>`<option>${safe(c.name)}</option>`).join('');$('restoreDialog').close();updateBackupStatus();render();renderSettings();notify('백업을 복원했어.')}catch(e){notify('올바르지 않거나 손상된 가계부 백업 파일이야.')}};
 load();
+ if(!db.sampleFixedSeeded){if(!db.fixed.length)db.fixed.push({id:1710000000001,name:'통신요금',amount:19800,day:21,category:'주거·통신',payment:'현금·이체'});db.sampleFixedSeeded=true;}
  db.transactions.forEach(t=>{if(t.type==='out'&&!t.payment)t.payment=''});
  $('fixedCategory').innerHTML=settings.out.map(c=>`<option>${safe(c.name)}</option>`).join('');
  applyFixed();persist();render();renderSettings();updateBackupStatus();
