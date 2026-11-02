@@ -1,0 +1,20 @@
+{
+  "id": "./",
+  "name": "나만의 가계부",
+  "short_name": "가계부",
+  "description": "내 휴대폰에 저장하는 심플한 개인 가계부",
+  "lang": "ko-KR",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f7f6f2",
+  "theme_color": "#f5f3ef",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
