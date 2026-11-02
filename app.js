@@ -104,7 +104,7 @@ function records(){return db.transactions.filter(t=>t.date?.startsWith(month))}
 function sum(arr,k){return arr.filter(t=>t.type===k).reduce((n,t)=>n+Number(t.amount||0),0)}
 function render(){
  const a=records(),inc=sum(a,'in'),out=sum(a,'out'),livingOut=a.filter(t=>t.type==='out'&&LIVING_CATEGORIES.includes(t.category)).reduce((n,t)=>n+Number(t.amount||0),0),budget=Number(db.budgets[month]||0);
- $('monthTitle').textContent=month.replace('-','년 ')+'월';
+ $('monthTitle').textContent=month.replace('-','년 ')+'월 ▾';
  $('income').textContent=won(inc);$('expense').textContent=won(out);
  $('remaining').textContent=budget?won(budget-livingOut):'예산 미설정';
  $('budgetText').textContent=budget?`생활비 예산 ${won(budget)} · ${Math.round(livingOut/budget*100)}% 사용`:'생활비 예산을 설정해 주세요';
@@ -134,8 +134,22 @@ $('cats').onclick=e=>{const b=e.target.closest('[data-category]');if(!b)return;c
 $('payment').onclick=e=>{const b=e.target.closest('[data-payment]');if(!b)return;$('payment').dataset.value=b.dataset.payment;$('payment').querySelectorAll('.cat').forEach(x=>x.classList.toggle('sel',x===b))};
 $('saveEntry').onclick=()=>{const amount=Number($('amount').value),date=$('date').value;if(!Number.isSafeInteger(amount)||amount<=0||!date)return notify('금액과 날짜를 확인해 줘.');const t={id:editing??Date.now(),type:kind,amount,category,payment:kind==='out'?$('payment').dataset.value:'',memo:$('memo').value.trim(),date};if(editing)db.transactions=db.transactions.map(x=>x.id===editing?t:x);else db.transactions.push(t);if(persistTransactionChange()){closeEntry();render();}};
 $('transactions').onclick=e=>{const edit=e.target.closest('[data-edit]'),del=e.target.closest('[data-delete]');if(edit){const t=db.transactions.find(x=>x.id===Number(edit.dataset.edit));if(t)showEntry(t.type,t)}if(del&&confirm('이 거래를 삭제할까?')){db.transactions=db.transactions.filter(x=>x.id!==Number(del.dataset.delete));persistTransactionChange();render()}};
-$('prev').onclick=()=>{const [y,m]=month.split('-').map(Number),d=new Date(y,m-2,1);month=localDate(d).slice(0,7);render()};
-$('next').onclick=()=>{const [y,m]=month.split('-').map(Number),d=new Date(y,m,1);month=localDate(d).slice(0,7);render()};
+let pickerYear=Number(month.slice(0,4));
+function closeMonthPicker(){ $('monthPicker').classList.add('hidden'); $('monthTitle').setAttribute('aria-expanded','false'); }
+function renderMonthPicker(){
+ const currentYear=Number(month.slice(0,4));
+ const years=[];for(let y=Math.min(2000,currentYear);y<=Math.max(new Date().getFullYear()+10,currentYear);y++)years.push(y);
+ $('yearSelect').innerHTML=years.map(y=>`<option value="${y}" ${y===pickerYear?'selected':''}>${y}년</option>`).join('');
+ const selectedMonth=Number(month.slice(5,7));
+ $('monthOptions').innerHTML=Array.from({length:12},(_,i)=>{const m=i+1;return `<button type="button" class="month-option ${pickerYear===currentYear&&m===selectedMonth?'selected':''}" data-pick-month="${m}">${m}월</button>`}).join('');
+}
+$('monthTitle').onclick=()=>{const opening=$('monthPicker').classList.contains('hidden');if(opening){pickerYear=Number(month.slice(0,4));renderMonthPicker();$('monthPicker').classList.remove('hidden');$('monthTitle').setAttribute('aria-expanded','true')}else closeMonthPicker()};
+$('yearSelect').onchange=()=>{pickerYear=Number($('yearSelect').value);renderMonthPicker()};
+$('monthOptions').onclick=e=>{const b=e.target.closest('[data-pick-month]');if(!b)return;month=`${pickerYear}-${String(Number(b.dataset.pickMonth)).padStart(2,'0')}`;closeMonthPicker();render()};
+document.addEventListener('click',e=>{if(!$('monthPicker').classList.contains('hidden')&&!e.target.closest('.month'))closeMonthPicker()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeMonthPicker()});
+$('prev').onclick=()=>{closeMonthPicker();const [y,m]=month.split('-').map(Number),d=new Date(y,m-2,1);month=localDate(d).slice(0,7);render()};
+$('next').onclick=()=>{closeMonthPicker();const [y,m]=month.split('-').map(Number),d=new Date(y,m,1);month=localDate(d).slice(0,7);render()};
 $('setBudget').onclick=()=>{const old=db.budgets[month]??'',v=prompt(`${month} 생활비 예산을 원 단위로 입력해 줘. (비우면 해제)`,old);if(v===null)return;if(v.trim()===''){delete db.budgets[month]}else if(!Number.isSafeInteger(Number(v))||Number(v)<0)return notify('0 이상의 정수 금액을 입력해 줘.');else db.budgets[month]=Number(v);persist();render()};
 document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-tab]').forEach(x=>x.classList.toggle('active',x===b));document.querySelectorAll('.section').forEach(x=>x.classList.toggle('active',x.id===b.dataset.tab))});
 function openFixedForm(f=null){
