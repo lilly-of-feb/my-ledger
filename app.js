@@ -198,11 +198,11 @@ function validateBackup(d){
  if(!d||!Array.isArray(d.transactions)||d.transactions.length>100000||!d.budgets||typeof d.budgets!=='object'||Array.isArray(d.budgets)||!Array.isArray(d.fixed)||d.fixed.length>10000)return false;
  const allowed=allCats().map(c=>c.name);
  for(const t of d.transactions){if(!t||!Number.isSafeInteger(t.id)||!['in','out'].includes(t.type)||!Number.isSafeInteger(t.amount)||t.amount<=0||!allowed.includes(t.category)||typeof t.memo!=='string'||t.memo.length>80||(t.type==='out'&&t.payment!==undefined&&t.payment!==''&&!settings.payment.some(p=>p.name===t.payment))||!validDate(t.date)||(t.fixedId!==undefined&&!Number.isSafeInteger(t.fixedId)))return false}
- for(const [m,v] of Object.entries(d.budgets)){if(!/^\\d{4}-\\d{2}$/.test(m)||!Number.isSafeInteger(v)||v<0)return false}
+ for(const [m,v] of Object.entries(d.budgets)){if(!/^\d{4}-\d{2}$/.test(m)||!Number.isSafeInteger(v)||v<0)return false}
  for(const f of d.fixed){if(!f||!Number.isSafeInteger(f.id)||typeof f.name!=='string'||!f.name.trim()||f.name.length>80||!Number.isSafeInteger(f.amount)||f.amount<=0||!Number.isInteger(f.day)||f.day<1||f.day>31||!allowed.includes(f.category)||(f.payment!==undefined&&f.payment!==''&&!settings.payment.some(p=>p.name===f.payment))||(f.created!==undefined&&!validDate(f.created)))return false}
  return true;
 }
-$('doRestore').onclick=async()=>{const file=$('restoreFile').files[0];if(!file)return notify('백업 파일을 선택해 줘.');try{const x=JSON.parse(await file.text());const d=x.data;
+$('doRestore').onclick=async()=>{const file=$('restoreFile').files[0];if(!file)return notify('백업 파일을 선택해 줘.');try{const raw=(await file.text()).replace(/^\uFEFF/,'');const x=JSON.parse(raw);const d=x.data;
  if(d&&(!d.settings||!Array.isArray(d.settings.out)||!Array.isArray(d.settings.in)||!Array.isArray(d.settings.payment))){
   d.settings={out:makeItems(DEFAULTS.out),in:makeItems(DEFAULTS.in),payment:makeItems(DEFAULTS.payment)};
  }
