@@ -92,7 +92,7 @@ function renderFixed(){
  $('fixedMonthLabel').textContent=month.replace('-','년 ')+'월';
  $('fixedTotal').textContent=won(total);
  $('fixedImported').textContent=imported.length+'개 가져옴 · '+won(importedTotal);
- $('fixedList').innerHTML=db.fixed.length?db.fixed.map(f=>{
+ $('fixedList').innerHTML=db.fixed.length?[...db.fixed].sort((a,b)=>Number(a.day)-Number(b.day)||String(a.name).localeCompare(String(b.name),'ko')).map(f=>{
   const done=db.transactions.some(t=>t.fixedId===f.id&&t.fixedMonth===month);
   return `<div class="card fixed-item"><div class="row"><div class="grow"><b>${safe(f.name)}</b><div class="tiny">매월 ${f.day}일 · ${safe(f.category)} · ${safe(f.payment||'결제수단 미설정')}</div><b>${won(f.amount)}</b></div>${done?'<span class="tiny">가져옴 ✓</span>':'<span class="tiny">미등록</span>'}</div><div class="controls" style="justify-content:flex-end;margin-top:8px"><button data-fixed-edit="${f.id}">수정</button><button data-fixed-delete="${f.id}">삭제</button></div></div>`;
  }).join(''):'<div class="card muted" style="text-align:center;padding:24px;font-size:13px">등록된 고정지출이 없어.</div>';
@@ -112,7 +112,7 @@ function render(){
  $('budgetBar').style.background=budget&&livingOut>budget?'var(--red)':'var(--accent)';
  const list=[...a].sort((x,y)=>y.date.localeCompare(x.date)||y.id-x.id);
  $('count').textContent=list.length+'건';
- $('transactions').innerHTML=list.length?list.map(t=>`<div class="transaction"><div class="emoji">${catIcon(t.category)}</div><div class="grow"><div style="font-weight:650;font-size:14px">${safe(t.memo||t.category)}</div><div class="tiny">${safe(t.date)} · ${safe(t.category)}</div></div><div class="amount" style="color:${t.type==='in'?'var(--accent)':'inherit'}">${t.type==='in'?'+':'−'}${won(t.amount)}<div class="controls"><button data-edit="${t.id}">수정</button><button data-delete="${t.id}">삭제</button></div></div></div>`).join(''):'<div class="muted" style="text-align:center;padding:30px 0;font-size:13px">아직 내역이 없어. 첫 거래를 등록해 봐!</div>';
+ $('transactions').innerHTML=list.length?list.map(t=>`<div class="transaction"><div class="emoji">${catIcon(t.category)}</div><div class="grow"><div style="font-weight:650;font-size:14px">${safe(t.memo||t.category)}</div><div class="tiny">${safe(t.date)} · ${safe(t.category)}${t.type==='out'&&t.payment?' · '+safe(t.payment):''}</div></div><div class="amount" style="color:${t.type==='in'?'var(--accent)':'inherit'}">${t.type==='in'?'+':'−'}${won(t.amount)}<div class="controls"><button data-edit="${t.id}">수정</button><button data-delete="${t.id}">삭제</button></div></div></div>`).join(''):'<div class="muted" style="text-align:center;padding:30px 0;font-size:13px">아직 내역이 없어. 첫 거래를 등록해 봐!</div>';
  const renderGroup=(type)=>{const groups={};a.filter(t=>t.type===type).forEach(t=>groups[t.category]=(groups[t.category]||0)+Number(t.amount||0));const entries=Object.entries(groups).sort((x,y)=>y[1]-x[1]),total=entries.reduce((n,x)=>n+x[1],0),max=entries[0]?.[1]||1;return entries.length?entries.map(([c,v])=>`<div class="categoryline"><div class="row" style="justify-content:space-between;font-size:13px"><span>${catIcon(c)} ${safe(c)}</span><b>${won(v)}</b></div><div class="bar"><span style="width:${v/max*100}%"></span></div><div class="tiny">${total?Math.round(v/total*100):0}%</div></div>`).join(''):'<div class="muted" style="text-align:center;padding:18px;font-size:13px">해당 내역이 없어.</div>'};
  const paymentGroups={};a.filter(t=>t.type==='out').forEach(t=>{const p=t.payment||'미지정';paymentGroups[p]=(paymentGroups[p]||0)+Number(t.amount||0)});const paymentEntries=Object.entries(paymentGroups).sort((x,y)=>y[1]-x[1]),paymentTotal=paymentEntries.reduce((n,x)=>n+x[1],0),paymentMax=paymentEntries[0]?.[1]||1;const paymentStats=paymentEntries.length?paymentEntries.map(([name,value])=>{const item=settings.payment.find(x=>x.name===name);return `<div class="categoryline"><div class="row" style="justify-content:space-between;font-size:13px"><span>${item?.icon||'💳'} ${safe(name)}</span><b>${won(value)}</b></div><div class="bar"><span style="width:${value/paymentMax*100}%"></span></div><div class="tiny">${paymentTotal?Math.round(value/paymentTotal*100):0}%</div></div>`}).join(''):'<div class="muted" style="text-align:center;padding:18px;font-size:13px">해당 내역이 없어.</div>';$('statistics').innerHTML=`<b>지출분류 통계</b>${renderGroup('out')}<hr style="border:0;border-top:1px solid var(--line);margin:18px 0"><b>결제수단 통계</b>${paymentStats}<hr style="border:0;border-top:1px solid var(--line);margin:18px 0"><b>수입분류 통계</b>${renderGroup('in')}`;
  renderFixed();
@@ -185,7 +185,7 @@ $('jsonExportBtn').onclick=()=>{
  const json=JSON.stringify({format:'simple-ledger-backup-v1',exportedAt:new Date().toISOString(),data:db},null,2);
  download('가계부_백업_'+localDate()+'.json',json,'application/json');
  try{localStorage.setItem(JSON_DATE_KEY,new Date().toISOString())}catch(e){}
- updateBackupStatus();notify('JSON 백업 파일을 만들었어. 휴대폰에 보관해 줘.');
+ updateBackupStatus();notify('JSON 백업 파일을 만들었어.');
 };
 $('csvExportBtn').onclick=()=>{
  const csv=[['날짜','유형','카테고리','결제수단','내용','금액'],...db.transactions.map(t=>[t.date,t.type==='in'?'수입':'지출',t.category,t.type==='in'?'-':(t.payment||'-'),t.memo,t.amount])].map(r=>r.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(',')).join('\r\n');
